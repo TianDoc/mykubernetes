@@ -1,0 +1,95 @@
+kubernetes  install
+	 Installing kubeadm
+	系统要求： Ubuntu 16.04+ 、Debian 9、 CentOS 7、 RHEL 7、Fedora 25/26 (best-effort)、HypriotOS v1.0.1+ 、Container Linux (tested with 1800.6.0)
+	配置要求： 2 GB or more of RAM、2 CPUs or more
+ 
+ ===========================================================================================
+install   docker 
+###ubuntu
+	apt-get update
+	apt-get install -y docker.io
+#########install Docker CE 17.03 from Docker’s repositories for Ubuntu or Debian:
+	apt-get update
+	apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+	curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+	add-apt-repository "deb https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") $(lsb_release -cs) stable"
+	apt-get update && apt-get install -y docker-ce=$(apt-cache madison docker-ce | grep 17.03 | head -1 | awk '{print $3}')
+	
+Installing kubeadm, kubelet and kubectl
+####ubuntu
+	apt-get update && apt-get install -y apt-transport-https curl
+	curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+	cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
+		deb http://apt.kubernetes.io/ kubernetes-xenial main
+	EOF
+	apt-get update
+	apt-get install -y kubelet kubeadm kubectl
+	apt-mark hold kubelet kubeadm kubectl
+	
+==============================================================================================
+初始化master 
+	
+	master 节点：
+	在当前用户下执行：
+	    mkdir -p $HOME/.kube
+		sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+		sudo chown $(id -u):$(id -g) $HOME/.kube/config
+		
+		#dockhub 下载对应的 images
+		#例： docker pull xxxx/kube-proxy-amd64:v1.11.0 && docker tag xxxx/kube-proxy-amd64:v1.11.0 k8s.gcr.io/kube-proxy-amd64:v1.11.0
+		
+	kubeadm init --kubernetes-version=1.11.0 --apiserver-advertise-address 10.1.1.101 --pod-network-cidr=10.244.0.0/16
+	
+	
+	node 节点：
+		kubeadm join 10.1.1.101:6443 --token efroxz.u6nhoyfigb6i1w3o
+		
+安装部署仪表板dashboard Ui
+	默认安装 kubernetes是没有安装dashboard 的，要部署dashboard 运行：
+		kubectl create -f https://raw.githubusercontent.com/kubernetes/dashboard/master/src/deploy/recommended/kubernetes-dashboard.yaml
+		
+		因为  china 特殊的情况  被墙，所以需要修改
+		编辑   kubernetes-dashboard  中images 的名称
+		
+		
+		#Dashboard  访问
+			方式一：
+		kubectl proxy --port=8080 --address=10.1.1.101 --accept-hosts='^*$'&
+			访问链接： http://10.1.1.101:8080/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/#!/login
+			方式二：
+		kubectl --namespace=kube-system edit service kubernetes-dashboard
+			#修改 文件中的 ClusterIP 为 NodePort
+			kubectl -n kube-system get service kubernetes-dashboard   #查看dashboards 映射的端口号
+			访问链接：http://10.1.1.101:<pord>
+		
+	
+		登录权限设置：  
+			dashboard 支持两种登录认证方式： kubeconfig  和 令牌（token）
+			
+			认证文件：kubernetes-rbac.yaml 
+				apiVersion: v1
+				kind: ServiceAccount
+				metadata:
+				  name: kubernetes-dashboard
+				  namespace: kube-system
+
+				---
+
+				kind: ClusterRoleBinding
+				apiVersion: rbac.authorization.k8s.io/v1beta1
+				metadata:
+				  name: kubernetes-dashboard
+				subjects:
+				  - kind: ServiceAccount
+					name: kubernetes-dashboard
+					namespace: kube-system
+				roleRef:
+				  kind: ClusterRole
+				  name: cluster-admin
+				  apiGroup: rbac.authorization.k8s.io
+		#运行	
+		kubectl apply -f kubernetes-rbac.yaml
+		kubectl -n kube-system get pods
+		
+		访问：http://10.1.1.101:8080/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/
+
